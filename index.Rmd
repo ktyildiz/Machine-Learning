@@ -1,0 +1,135 @@
+---
+title: "Practical Machine Learning Class Project"
+date: "January 24, 2015"
+output: html_document
+---
+
+**Summary**
+
+-Use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+-The goal is to predict the manner in which they did the exercise. 
+
+
+**Variables**
+
+- The dependent variable of interest is the classe variable which has five levels (A,B,C,D,E).
+- 55 independent variables are included 
+- Variables without null values and variables related to time stamp are excluded. 
+- Some variables are observed to have high correlation (>0.8). Preprocessing with PCA is used to see if the prediction error will be improved. However, models without PCA where all variables are included performed better.
+ 
+**Candidate Models**
+
+Based on the characteristics of the data following candidate models are analyzed:
+
+-	CART decision tree
+-	LDA (linear discriminant analysis)
+-	Random forest
+
+**Data and Model selection**
+
+- Training data includes 19622 data points from 6 participants
+
+**Cross-validation**
+
+- 10 fold cross-validation is used for model selection based on the estimate of prediction error (i.e. out of sample error)
+
+*CART Model*
+
+- Here is the output of the 10 fold cross-validation:
+
+```{r, echo=FALSE}
+rm(list=ls())
+library(caret)
+library(randomForest)
+
+data = read.csv(file='pml-training.csv', header=TRUE, sep=',',na.strings=c('','NA'))
+data_test = read.csv(file='pml-testing.csv', header=TRUE, sep=',',na.strings=c('','NA'))
+#str(data)
+
+#Get the columns without NA values
+data=data[ ,colSums(is.na(data)) == 0]
+data_test=data_test[ ,colSums(is.na(data_test)) == 0]
+#str(data)
+
+#Get the columns without timestamp and username
+data=data[,6:60]
+data_test=data_test[,6:60]
+
+#Dependent variable is classe which is a factor variable with 5 levels - we can't use glm which only support binary outcome variable
+
+#Check the correlation among variables that are continuous
+data_new=data[,-1]
+data_new=data_new[,-54]
+M=abs(cor(data_new))
+diag(M)=0
+a=which(M>0.75,arr.ind=T)
+
+
+#Models to be compared:
+#Model 1 - CART - accuracy 0.5
+#Model 2 - lda - accuracy 0.72
+#Model 2 - random forest
+
+#Use k-folds cross validation
+#Try if prediction results will be improved when PCA is used 
+
+#check some graphs of variables for each dv.
+#featurePlot(x=data[,10:15],y=data$classe,plot="box")
+
+#Model 1 - CART
+set.seed(12345)
+CART=train(data$classe ~., method='rpart', data=data[,-55],
+           trControl=trainControl(method="cv", number=10))
+
+#you get the cross-validation estimate of the prediction error for all the models. 
+#The first model is the one selected. 
+#CV estimate of the prediction error gives the expected prediction error (out of sample error) of the model
+CART$results
+```
+
+- First model is selected with accuracy 0.53
+```{r, echo=FALSE}
+#CART$finalModel
+```
+
+*LDA Model*
+
+- Here is the output of the 10 fold cross-validation:
+```{r, echo=FALSE}
+#Model 2 - LDA
+LDA=train(data$classe ~., method='lda', data=data[,-55],
+          trControl=trainControl(method="cv", number=25))
+LDA$results
+```
+
+- LDA model accuracy is 0.71
+
+*Random Forest Model*
+
+- Here is the confusion matrix of the random forest model (with max. 50 trees):
+```{r, echo=FALSE}
+RF <- randomForest(data$classe ~ ., data=data[,-55], importance=FALSE,
+                        proximity=FALSE,ntree=50)
+
+levels(data_test$new_window)=c('no','yes')
+RF$confusion
+```
+
+- Below is the out-of-bag error rate for all the trees (mean=1.4%)
+```{r, echo=FALSE}
+a=RF$confusion
+print(a[,1])
+```
+
+*Model Selected*
+
+- The accuracy of the random forest model is 99% so it is selected. The expected out-of sample error is 1%
+
+
+*Prediction results using the selected Random Forest Model*
+```{r, echo=FALSE}
+#Random forest is used for prediction
+predict(RF, data_test)
+
+```
